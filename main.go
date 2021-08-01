@@ -1,11 +1,12 @@
 package main
 
 import (
-	"go_storage/package/storage"
+	"fmt"
+	"go_storage/storage"
 )
 
 func main(){
-    s3Bucket := NewAmazonS3Backend(
+    s3Bucket := storage.NewAmazonS3Backend(
         "media-query-mediabucket-1lauc6ptnwz0g",
         "us-west-2",
         "false",

@@ -1,4 +1,4 @@
-module github.com/hash167/go_storage
+module go_storage
 
 go 1.16
 
