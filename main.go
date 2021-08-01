@@ -1,7 +1,7 @@
 package main
 
 import (
-	
+	"go_storage/package/storage"
 )
 
 func main(){
