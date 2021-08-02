@@ -5,6 +5,7 @@ import (
     "fmt"
     "strings"
     "errors"
+    "mime/multipart"
 	"github.com/aws/aws-sdk-go/aws"
     "github.com/aws/aws-sdk-go/aws/session"
     "github.com/aws/aws-sdk-go/service/s3"
@@ -20,9 +21,15 @@ type AmazonS3Backend struct {
     Client *s3.S3
     Downloader *s3manager.Downloader
     Uploader *s3manager.Uploader
-    SSE string
 }
 
+type UploadFileOptions struct {
+    Acl string
+    ServerSideEncryption string
+    KmsKeyId string
+    ContentType string
+    DisableMultipart bool
+}
 func (b AmazonS3Backend) ListObjects(prefix string) (map[string]*s3.Object, error) {
     cleaned_prefix := cleanPrefix(prefix)
     bucketContents := map[string]*s3.Object{}
@@ -63,8 +70,7 @@ const maxRetries = 12
 
 func NewAmazonS3Backend(
     bucket string,
-    region string, 
-    sse string) *AmazonS3Backend {
+    region string) *AmazonS3Backend {
     sess, err := session.NewSession(&aws.Config{
         Region: aws.String(region),
         MaxRetries: aws.Int(maxRetries)},)
@@ -78,7 +84,6 @@ func NewAmazonS3Backend(
         Client: svc,
         Downloader: s3manager.NewDownloaderWithClient(svc),
         Uploader: s3manager.NewUploaderWithClient(svc),
-        SSE: sse,
     }
     return backend
 }
@@ -107,6 +112,65 @@ func (b AmazonS3Backend) GetObject(prefix string, localPath string) error {
 		return err_d
 	}
 
+    return nil
+}
+
+func (b AmazonS3Backend) UploadObject(
+    remotePath string,
+    localFile *multipart.FileHeader,
+    options UploadFileOptions) error {
+    // fmt.Printf("Local Path is %s", localPath)
+    // stat, err := os.Stat(localPath)
+    // if err != nil {
+    //     fmt.Println("Unable to find file in local path")
+    //     return err
+    // }
+    // localFile, err := os.Open(localPath)
+    // if err != nil {
+    //     fmt.Println("Unable to open local file")
+    //     return err
+    // }
+    // defer localFile.Close()
+
+    // fSize := int64(len(localFile))
+    uploader := b.Uploader
+    // if !options.DisableMultipart {
+	// 	if fSize > int64(uploader.MaxUploadParts)*uploader.PartSize {
+	// 		partSize := fSize / int64(uploader.MaxUploadParts)
+	// 		if fSize%int64(uploader.MaxUploadParts) != 0 {
+	// 			partSize++
+	// 		}
+	// 		uploader.PartSize = partSize
+	// 	}
+	// } else {
+	// 	uploader.MaxUploadParts = 1
+	// 	uploader.Concurrency = 1
+	// 	uploader.PartSize = fSize + 1
+	// 	if fSize <= s3manager.MinUploadPartSize {
+	// 		uploader.PartSize = s3manager.MinUploadPartSize
+	// 	}
+	// }
+    localFileIO, _ := localFile.Open()
+    uploadInput := s3manager.UploadInput{
+        Bucket: aws.String(b.Bucket),
+        Key: aws.String(remotePath),
+        Body: localFileIO,
+        ACL: aws.String(options.Acl),
+    }
+    if options.ServerSideEncryption != "" {
+		uploadInput.ServerSideEncryption = aws.String(options.ServerSideEncryption)
+	}
+	if options.KmsKeyId != "" {
+		uploadInput.SSEKMSKeyId = aws.String(options.KmsKeyId)
+	}
+	if options.ContentType != "" {
+		uploadInput.ContentType = aws.String(options.ContentType)
+	}
+    _, err := uploader.Upload(&uploadInput)
+	if err != nil {
+        fmt.Println("Unable to Upload file")
+		return err
+	}
     return nil
 }
 
